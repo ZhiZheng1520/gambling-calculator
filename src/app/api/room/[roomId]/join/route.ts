@@ -7,7 +7,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
   const { playerName } = await req.json();
   const room = getRoom(roomId);
   if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
-  if (room.status === "settled") return NextResponse.json({ error: "Room settled" }, { status: 400 });
+  if (room.status === "settled") return NextResponse.json({ error: "Room已结束 — ask host for the new room code 请问主持人要新房间号" }, { status: 400 });
 
   // Reconnect if name exists
   const existing = room.players.find(p => p.name === playerName);
