@@ -68,7 +68,8 @@ export default function RoomPage() {
   const lastUpdate = useRef("");
   const prevRound = useRef(0);
 
-  const me = room?.players.find(p => p.id === myId);
+  const effectiveId = myId || (typeof window !== "undefined" ? localStorage.getItem("playerId") || "" : "");
+  const me = room?.players.find(p => p.id === effectiveId);
   const isHost = me?.isHost || false;
   const isDealer = me?.isDealer || false;
   const isHostOrDealer = isHost || isDealer;
@@ -77,38 +78,40 @@ export default function RoomPage() {
   useEffect(() => { setMyId(localStorage.getItem("playerId") || ""); }, []);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(""), 3000); return () => clearTimeout(t); } }, [toast]);
 
-  // Join room (with retry)
+  // Join room (runs once on mount, doesn't need myId)
+  const joinedRef = useRef(false);
   useEffect(() => {
-    if (!roomId || !myId) return;
+    if (!roomId || joinedRef.current) return;
     const pname = localStorage.getItem("playerName") || "Player";
     let retries = 0;
     const tryJoin = () => {
       fetch(`${API}/api/room/${(roomId as string).toUpperCase()}/join`, {
         method: "POST", headers: {"Content-Type":"application/json"},
         body: JSON.stringify({ playerName: pname }),
-      }).then(r => {
-        if (!r.ok && retries < 2) { retries++; setTimeout(tryJoin, 1000); return null; }
-        return r.json();
-      }).then(d => {
-        if (!d) return;
+      }).then(async r => {
+        const text = await r.text();
+        let d;
+        try { d = JSON.parse(text); } catch { throw new Error("Non-JSON response: " + text.slice(0, 100)); }
         if (d.success) {
+          joinedRef.current = true;
           if (d.playerId) { setMyId(d.playerId); localStorage.setItem("playerId", d.playerId); }
           setRoom(d.room);
           lastUpdate.current = d.room.updatedAt;
           setMyBet(d.room.baseBet);
         } else {
           console.error("[room] join failed:", d.error);
-          if (retries < 2) { retries++; setTimeout(tryJoin, 1000); }
+          if (retries < 3) { retries++; setTimeout(tryJoin, 1500); }
           else setRoomGone(true);
         }
       }).catch(err => {
         console.error("[room] join error:", err);
-        if (retries < 2) { retries++; setTimeout(tryJoin, 1000); }
+        if (retries < 3) { retries++; setTimeout(tryJoin, 1500); }
         else setRoomGone(true);
       });
     };
-    tryJoin();
-  }, [roomId, myId]);
+    // Small delay to let localStorage settle after redirect
+    setTimeout(tryJoin, 300);
+  }, [roomId]);
 
   // Poll
   useEffect(() => {
@@ -116,8 +119,8 @@ export default function RoomPage() {
     let active = true;
     const poll = async () => {
       try {
-        const pid = localStorage.getItem("playerId") || "";
-        const res = await fetch(`${API}/api/room/${(roomId as string).toUpperCase()}?playerId=${pid}`);
+        const storedPid = localStorage.getItem("playerId") || myId || "";
+        const res = await fetch(`${API}/api/room/${(roomId as string).toUpperCase()}?playerId=${storedPid}`);
         if (res.status === 404) { setRoomGone(true); return; }
         if (res.ok) {
           const data: Room = await res.json();
@@ -140,10 +143,11 @@ export default function RoomPage() {
   }, [roomId, showRoundInput, showSettle]);
 
   const doAction = useCallback(async (action: string, extra: Record<string, unknown> = {}) => {
-    if (!roomId || !myId) return null;
+    const pid = myId || localStorage.getItem("playerId") || "";
+    if (!roomId || !pid) return null;
     const res = await fetch(`${API}/api/room/${(roomId as string).toUpperCase()}/action`, {
       method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ action, playerId: myId, ...extra }),
+      body: JSON.stringify({ action, playerId: pid, ...extra }),
     });
     const data = await res.json();
     if (data.room) { setRoom(data.room); lastUpdate.current = data.room.updatedAt; }
@@ -370,7 +374,7 @@ export default function RoomPage() {
           {/* Player hands */}
           {room.players.filter(p => !p.isDealer && room.hands?.[p.id]).map(p => {
             const cards = room.hands![p.id];
-            const isMine = p.id === myId;
+            const isMine = p.id === effectiveId;
             const realCards = cards.filter(c => c !== "🂠");
             let evalStr: string | undefined;
             if (isMine || isHostOrDealer) {
@@ -434,7 +438,7 @@ export default function RoomPage() {
         <h2 className="text-sm font-medium text-gray-400 mb-3">Scoreboard</h2>
         <div className="space-y-2">
           {room.players.sort((a, b) => b.score - a.score).map(p => (
-            <div key={p.id} className={`flex items-center justify-between p-3 rounded-xl ${p.id === myId ? "bg-purple-500/10 border border-purple-500/20" : "bg-white/[0.03]"}`}>
+            <div key={p.id} className={`flex items-center justify-between p-3 rounded-xl ${p.id === effectiveId ? "bg-purple-500/10 border border-purple-500/20" : "bg-white/[0.03]"}`}>
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <span className="text-white font-medium truncate">{p.name}</span>
                 {p.isHost && <span className="text-xs text-yellow-400 shrink-0">👑</span>}
