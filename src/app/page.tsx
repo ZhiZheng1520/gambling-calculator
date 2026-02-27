@@ -200,7 +200,7 @@ export default function Home() {
                     <p className="text-green-400">Win 赢 → 1x</p>
                     <p className="text-gray-400">Push 平局 → 0 (退回)</p>
                     <p className="text-red-400">Lose 输 → -1x</p>
-                    <p className="text-red-400">Bust 爆牌 (>21) → -1x</p>
+                    <p className="text-red-400">Bust 爆牌 (&gt;21) → -1x</p>
                   </div>
                 </div>
               </div>

@@ -18,11 +18,7 @@ export default function RoomPage() {
   const [adjustAmount, setAdjustAmount] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  const copyRoomCode = () => {
-    navigator.clipboard?.writeText(room?.id || "");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [dealerHand, setDealerHand] = useState("无牛");
 
   const me = room?.players.find((p) => p.id === myId);
@@ -117,6 +113,7 @@ export default function RoomPage() {
   }, []);
 
   // When dealer hand changes, recalculate all player P&Ls
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const recalcAllForDealer = useCallback((newDealerHand: string) => {
     if (room?.game !== "niuniu") return;
     setRoundInputs((prev) => {
