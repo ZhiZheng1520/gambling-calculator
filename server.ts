@@ -17,6 +17,7 @@ interface Player {
   isHost: boolean;
   isDealer: boolean;
   connected: boolean;
+  bet: number; // Player's individual bet amount
 }
 
 interface RoundResult {
@@ -25,6 +26,8 @@ interface RoundResult {
   bet: number;
   outcome: string;
   multiplier: number;
+  deduction: number;
+  grossPnl: number;
   pnl: number;
 }
 
@@ -99,10 +102,11 @@ app.prepare().then(() => {
       const player: Player = {
         id: playerId, socketId: socket.id, name: playerName,
         score: 0, isHost: true, isDealer: false, connected: true,
+        bet: baseBet || 10, // Host's initial bet
       };
       const room: Room = {
         id: roomId, game, players: [player], rounds: [],
-        status: "waiting", currentRound: 0, baseBet: baseBet || 10,
+        status: "waiting", currentRound: 1, baseBet: baseBet || 10,
         createdAt: new Date().toISOString(),
       };
       rooms.set(roomId, room);
@@ -132,6 +136,7 @@ app.prepare().then(() => {
       const player: Player = {
         id: playerId, socketId: socket.id, name: playerName,
         score: 0, isHost: false, isDealer: false, connected: true,
+        bet: 10, // Default bet for new players (can be changed with set-bet)
       };
       room.players.push(player);
       socket.join(room.id);
@@ -166,18 +171,60 @@ app.prepare().then(() => {
       io.to(room.id).emit("room-state", room);
     });
 
+    // ─── Set Player Bet (players can change their own bet anytime) ───
+    socket.on("set-bet", ({ amount }: { amount: number }, cb) => {
+      const room = rooms.get(socket.data?.roomId);
+      if (!room) return cb?.({ success: false, error: "Not in a room" });
+      
+      const player = room.players.find((p) => p.id === socket.data?.playerId);
+      if (!player) return cb?.({ success: false, error: "Player not found" });
+      
+      // Dealer (庄家) cannot change bet - they take bets from players
+      if (player.isDealer) {
+        return cb?.({ success: false, error: "Dealer cannot set bet" });
+      }
+      
+      // Minimum bet check (use room baseBet as minimum)
+      if (amount < room.baseBet) return cb?.({ success: false, error: `Minimum bet is ${room.baseBet}` });
+      
+      // Update player's bet (allowed anytime before each round)
+      player.bet = amount;
+      cb?.({ success: true, newBet: amount });
+      io.to(room.id).emit("room-state", room);
+      io.to(room.id).emit("notification", { message: `${player.name} changed bet to ${amount}` });
+    });
+
     // ─── Start Round ───
     socket.on("start-round", (_, cb) => {
       const room = rooms.get(socket.data?.roomId);
       if (!room) return cb?.({ success: false });
       const caller = room.players.find((p) => p.id === socket.data?.playerId);
-      if (!caller?.isHost) return cb?.({ success: false, error: "Not host" });
+      if (!caller?.isHost && !caller?.isDealer) return cb?.({ success: false, error: "Not host or dealer" });
+      
+      // Set room status to playing
       room.status = "playing";
-      room.currentRound++;
+      
+      // Create new round with current number
       room.rounds.push({ number: room.currentRound, results: [], timestamp: new Date().toISOString() });
-      cb?.({ success: true, roundNumber: room.currentRound });
+      
+      // Calculate round bets based on each player's individual bet (or fallback to room.baseBet)
+      room.rounds[room.rounds.length - 1].results = room.players
+        .filter((p) => !p.isDealer)
+        .map((player) => ({
+          playerId: player.id,
+          playerName: player.name,
+          bet: player.bet || room.baseBet, // Use player's individual bet or fallback to room baseBet
+          outcome: "Pending",
+          multiplier: 1,
+          pnl: 0,
+        }));
+      
+      // Increment round number for next round
+      room.currentRound++;
+      
+      cb?.({ success: true, roundNumber: room.currentRound - 1 });
       io.to(room.id).emit("room-state", room);
-      io.to(room.id).emit("round-started", { roundNumber: room.currentRound });
+      io.to(room.id).emit("round-started", { roundNumber: room.currentRound - 1 });
     });
 
     // ─── Submit Round Result (host submits for all players) ───
@@ -185,7 +232,7 @@ app.prepare().then(() => {
       const room = rooms.get(socket.data?.roomId);
       if (!room) return cb?.({ success: false });
       const caller = room.players.find((p) => p.id === socket.data?.playerId);
-      if (!caller?.isHost) return cb?.({ success: false, error: "Not host" });
+      if (!caller?.isHost && !caller?.isDealer) return cb?.({ success: false, error: "Not host or dealer" });
       
       const round = room.rounds[room.rounds.length - 1];
       if (!round) return cb?.({ success: false, error: "No active round" });
@@ -238,7 +285,7 @@ app.prepare().then(() => {
       const room = rooms.get(socket.data?.roomId);
       if (!room) return cb?.({ success: false });
       const caller = room.players.find((p) => p.id === socket.data?.playerId);
-      if (!caller?.isHost) return cb?.({ success: false, error: "Not host" });
+      if (!caller?.isHost && !caller?.isDealer) return cb?.({ success: false, error: "Not host or dealer" });
       room.status = "settled";
       const settlements = calculateSettlement(room.players);
       cb?.({ success: true, settlements });
