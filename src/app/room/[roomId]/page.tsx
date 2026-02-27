@@ -77,21 +77,37 @@ export default function RoomPage() {
   useEffect(() => { setMyId(localStorage.getItem("playerId") || ""); }, []);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(""), 3000); return () => clearTimeout(t); } }, [toast]);
 
-  // Join room
+  // Join room (with retry)
   useEffect(() => {
     if (!roomId || !myId) return;
     const pname = localStorage.getItem("playerName") || "Player";
-    fetch(`${API}/api/room/${(roomId as string).toUpperCase()}/join`, {
-      method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ playerName: pname }),
-    }).then(r => r.json()).then(d => {
-      if (d.success) {
-        if (d.playerId) { setMyId(d.playerId); localStorage.setItem("playerId", d.playerId); }
-        setRoom(d.room);
-        lastUpdate.current = d.room.updatedAt;
-        setMyBet(me?.bet || d.room.baseBet);
-      } else setRoomGone(true);
-    }).catch(() => setRoomGone(true));
+    let retries = 0;
+    const tryJoin = () => {
+      fetch(`${API}/api/room/${(roomId as string).toUpperCase()}/join`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ playerName: pname }),
+      }).then(r => {
+        if (!r.ok && retries < 2) { retries++; setTimeout(tryJoin, 1000); return null; }
+        return r.json();
+      }).then(d => {
+        if (!d) return;
+        if (d.success) {
+          if (d.playerId) { setMyId(d.playerId); localStorage.setItem("playerId", d.playerId); }
+          setRoom(d.room);
+          lastUpdate.current = d.room.updatedAt;
+          setMyBet(d.room.baseBet);
+        } else {
+          console.error("[room] join failed:", d.error);
+          if (retries < 2) { retries++; setTimeout(tryJoin, 1000); }
+          else setRoomGone(true);
+        }
+      }).catch(err => {
+        console.error("[room] join error:", err);
+        if (retries < 2) { retries++; setTimeout(tryJoin, 1000); }
+        else setRoomGone(true);
+      });
+    };
+    tryJoin();
   }, [roomId, myId]);
 
   // Poll
