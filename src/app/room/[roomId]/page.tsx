@@ -200,6 +200,8 @@ export default function RoomPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] p-4 pb-28">
+      {/* Prevent iOS zoom on input focus */}
+      <style>{`input, select, textarea { font-size: 16px !important; }`}</style>
       {/* Toast */}
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-purple-600/90 text-white px-4 py-2 rounded-xl text-sm font-medium backdrop-blur animate-pulse">{toast}</div>
