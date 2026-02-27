@@ -114,8 +114,20 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Base Bet 底注</label>
+                  <div className="flex gap-2 mt-1 mb-2">
+                    {[1, 2, 3, 5, 10].map((amt) => (
+                      <button key={amt} onClick={() => setBaseBet(amt)}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                          baseBet === amt
+                            ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg"
+                            : "bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10"
+                        }`}>
+                        RM{amt}
+                      </button>
+                    ))}
+                  </div>
                   <input type="number" value={baseBet} onChange={(e) => setBaseBet(Number(e.target.value))}
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-lg focus:outline-none focus:border-purple-500/50" />
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-lg focus:outline-none focus:border-purple-500/50" placeholder="Custom amount" />
                 </div>
                 {error && <div className="text-red-400 text-sm">{error}</div>}
                 <button onClick={handleCreate} disabled={loading}

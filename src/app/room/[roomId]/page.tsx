@@ -367,9 +367,21 @@ export default function RoomPage() {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="text-xs text-gray-500">Bet</label>
+                    <div className="flex gap-1 mb-1">
+                      {[1, 2, 3, 5].map((amt) => (
+                        <button key={amt} onClick={() => updatePlayerResult(p.id, "bet", amt)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+                            (roundInputs[p.id]?.bet || room.baseBet) === amt
+                              ? "bg-purple-600 text-white shadow-lg shadow-purple-500/30"
+                              : "bg-white/5 text-gray-400 hover:bg-white/10"
+                          }`}>
+                          RM{amt}
+                        </button>
+                      ))}
+                    </div>
                     <input type="number" value={roundInputs[p.id]?.bet || room.baseBet}
                       onChange={(e) => updatePlayerResult(p.id, "bet", Number(e.target.value))}
-                      className="w-full px-2 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-center" />
+                      className="w-full px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-center text-sm" />
                   </div>
                   <div>
                     <label className="text-xs text-gray-500">Result</label>
