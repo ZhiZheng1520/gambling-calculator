@@ -200,6 +200,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
       break;
     }
 
+    case "switch-game": {
+      if (!isHostOrDealer) return NextResponse.json({ error: "Not host/dealer" }, { status: 403 });
+      const newGame = body.game;
+      if (newGame !== "21" && newGame !== "niuniu") return NextResponse.json({ error: "Invalid game" }, { status: 400 });
+      room.game = newGame;
+      // Reset card state if mid-round
+      room.deck = undefined;
+      room.hands = undefined;
+      room.dealerCards = undefined;
+      room.bjPlayerStatus = undefined;
+      break;
+    }
+
     case "end-session": {
       if (!isHostOrDealer) return NextResponse.json({ error: "Not host/dealer" }, { status: 403 });
       room.status = "settled";
