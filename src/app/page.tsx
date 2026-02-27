@@ -135,7 +135,7 @@ export default function Home() {
               <div className="space-y-4 text-sm text-gray-300">
                 <div><h3 className="text-white font-bold mb-1">🐂 牛牛 (Niu Niu / Bull Bull)</h3><p>每人发5张牌，其中3张凑成10的倍数（有牛），剩余2张决定牛几。</p><p className="text-gray-500 mt-1">5 cards dealt. 3 cards must sum to a multiple of 10 (Bull). Remaining 2 determine the bull number.</p></div>
                 <div><h3 className="text-white font-bold mb-1">倍率 / Multipliers:</h3><div className="grid grid-cols-2 gap-1"><span>无牛 No Bull → 1x</span><span>牛1-6 Bull 1-6 → 1x</span><span>牛7-8 Bull 7-8 → 2x</span><span>牛9 Bull 9 → 3x</span><span className="text-yellow-400">牛牛 Bull Bull → 3x</span><span className="text-red-400">五花牛 5 Face → 5x</span><span className="text-red-400">炸弹牛 Bomb → 5x</span><span className="text-red-400">五小牛 5 Small → 5x</span></div></div>
-                <div><h3 className="text-white font-bold mb-1">胜负 / Win/Lose:</h3><p>玩家 vs 庄家：牌型大的赢。牌型相同庄家赢。</p><p className="text-gray-500">Player vs Dealer: higher hand wins. Tie goes to dealer.</p></div>
+                <div><h3 className="text-white font-bold mb-1">胜负 / Win/Lose:</h3><p>玩家 vs 庄家：牌型大的赢。牌型相同 = 平局 (0)。</p><p className="text-gray-500">Player vs Dealer: higher hand wins. Same hand = draw (0).</p></div>
               </div>
             ) : (
               <div className="space-y-4 text-sm text-gray-300">

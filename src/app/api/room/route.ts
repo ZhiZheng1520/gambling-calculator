@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   const { game, playerName, baseBet } = await req.json();
   const roomId = genRoomId();
   const playerId = genPlayerId();
-  const player: Player = { id: playerId, name: playerName, score: 0, isHost: true, isDealer: false, bet: baseBet || 10 };
+  const player: Player = { id: playerId, name: playerName, score: 0, isHost: true, isDealer: true, bet: baseBet || 10 };
   const room: Room = {
     id: roomId, game: game || "niuniu", players: [player], rounds: [],
     status: "waiting", currentRound: 0, baseBet: baseBet || 10,
