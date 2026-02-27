@@ -16,6 +16,15 @@ export default function RoomPage() {
   const [showSettle, setShowSettle] = useState(false);
   const [adjustPlayer, setAdjustPlayer] = useState<Player | null>(null);
   const [adjustAmount, setAdjustAmount] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  const copyRoomCode = () => {
+    navigator.clipboard?.writeText(room?.id || "");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  const [copied, setCopied] = useState(false);
+  const [dealerHand, setDealerHand] = useState("无牛");
 
   const me = room?.players.find((p) => p.id === myId);
   const isHost = me?.isHost || false;
@@ -42,7 +51,6 @@ export default function RoomPage() {
       }
     });
 
-    socket.on("room-state", (r: Room) => setRoom(r));
     socket.on("notification", ({ message }: { message: string }) => {
       setNotifications((prev) => [...prev.slice(-4), message]);
       setTimeout(() => setNotifications((prev) => prev.slice(1)), 3000);
@@ -52,6 +60,39 @@ export default function RoomPage() {
     socket.on("session-settled", ({ settlements: s }: { settlements: Settlement[] }) => {
       setSettlements(s);
       setShowSettle(true);
+      // Save to history
+      try {
+        const raw = localStorage.getItem("gambling-history");
+        const hist = raw ? JSON.parse(raw) : [];
+        // room state should be updated by now via room-state event
+        hist.unshift({
+          roomId: (roomId as string).toUpperCase(),
+          game: "niuniu",
+          playerName: localStorage.getItem("playerName") || "",
+          players: [],
+          rounds: 0,
+          date: new Date().toISOString(),
+        });
+        localStorage.setItem("gambling-history", JSON.stringify(hist.slice(0, 50)));
+      } catch {}
+    });
+
+    // Also update history with full data when room state changes after settle
+    socket.on("room-state", (r: Room) => {
+      setRoom(r);
+      if (r.status === "settled") {
+        try {
+          const raw = localStorage.getItem("gambling-history");
+          const hist = raw ? JSON.parse(raw) : [];
+          const existing = hist.find((h: any) => h.roomId === r.id);
+          if (existing) {
+            existing.game = r.game;
+            existing.players = r.players.map((p) => ({ name: p.name, score: p.score }));
+            existing.rounds = r.rounds.length;
+          }
+          localStorage.setItem("gambling-history", JSON.stringify(hist));
+        } catch {}
+      }
     });
 
     return () => {
@@ -63,12 +104,47 @@ export default function RoomPage() {
     };
   }, [roomId]);
 
+  // Helper: calculate niuniu P&L for a player hand vs the dealer hand
+  const calcNiuniuPnl = useCallback((playerOutcome: string, dealerOutcome: string, bet: number) => {
+    const playerIdx = NIUNIU_HANDS.findIndex((h) => h.labelCn === playerOutcome);
+    const dealerIdx = NIUNIU_HANDS.findIndex((h) => h.labelCn === dealerOutcome);
+    const playerMult = NIUNIU_HANDS[playerIdx]?.multiplier || 1;
+    const dealerMult = NIUNIU_HANDS[dealerIdx]?.multiplier || 1;
+    // Multiplier used is the HIGHER hand's multiplier (winner's multiplier)
+    const mult = Math.max(playerMult, dealerMult);
+    if (playerIdx > dealerIdx) return Math.round(bet * mult * 100) / 100;   // Win
+    if (playerIdx < dealerIdx) return Math.round(-bet * mult * 100) / 100;  // Lose
+    return 0; // Tie
+  }, []);
+
+  // When dealer hand changes, recalculate all player P&Ls
+  const recalcAllForDealer = useCallback((newDealerHand: string) => {
+    if (room?.game !== "niuniu") return;
+    setRoundInputs((prev) => {
+      const next = { ...prev };
+      for (const pid of Object.keys(next)) {
+        const p = { ...next[pid] };
+        p.pnl = calcNiuniuPnl(p.outcome, newDealerHand, p.bet);
+        next[pid] = p;
+      }
+      return next;
+    });
+  }, [room?.game, calcNiuniuPnl]);
+
   const initRoundInputs = useCallback(() => {
     if (!room) return;
     const inputs: typeof roundInputs = {};
-    room.players.filter((p) => !p.isDealer).forEach((p) => {
-      inputs[p.id] = { outcome: room.game === "niuniu" ? "无牛" : "Lose", bet: room.baseBet, multiplier: 1, pnl: -room.baseBet };
-    });
+    if (room.game === "niuniu") {
+      setDealerHand("无牛");
+      room.players.filter((p) => !p.isDealer).forEach((p) => {
+        // Default: player=无牛, dealer=无牛 → tie → pnl=0
+        inputs[p.id] = { outcome: "无牛", bet: room.baseBet, multiplier: 1, pnl: 0 };
+      });
+    } else {
+      room.players.filter((p) => !p.isDealer).forEach((p) => {
+        inputs[p.id] = { outcome: "Lose", bet: room.baseBet, multiplier: 1, pnl: -room.baseBet };
+      });
+    }
     setRoundInputs(inputs);
   }, [room]);
 
@@ -148,6 +224,37 @@ export default function RoomPage() {
     });
   };
 
+  const saveSessionToHistory = useCallback(() => {
+    if (!room || room.rounds.length === 0) return;
+    try {
+      const session = {
+        id: `${room.id}-${Date.now()}`,
+        date: new Date().toISOString(),
+        gameType: room.game,
+        players: room.players.map((p) => ({ name: p.name, score: p.score, isDealer: p.isDealer })),
+        rounds: room.rounds.map((r) => ({
+          number: r.number,
+          results: r.results.map((res) => ({ playerName: res.playerName, pnl: res.pnl, outcome: res.outcome })),
+          timestamp: r.timestamp,
+        })),
+        settlements: settlements.map((s) => ({ from: s.from, to: s.to, amount: s.amount })),
+        roomId: room.id,
+      };
+      const raw = localStorage.getItem("gambling-history");
+      const history = raw ? JSON.parse(raw) : [];
+      history.push(session);
+      localStorage.setItem("gambling-history", JSON.stringify(history));
+    } catch {
+      // silently fail
+    }
+  }, [room, settlements]);
+
+  useEffect(() => {
+    if (showSettle) {
+      saveSessionToHistory();
+    }
+  }, [showSettle, saveSessionToHistory]);
+
   const endSession = () => {
     if (confirm("End session? This will calculate final settlement.")) {
       getSocket().emit("end-session", null, () => {});
@@ -172,7 +279,17 @@ export default function RoomPage() {
             <h1 className="text-xl font-bold text-white">{room.game === "niuniu" ? "牛牛" : "21点"}</h1>
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs font-mono bg-purple-600/30 text-purple-300 px-2 py-0.5 rounded">{room.id}</span>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(room.id);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+              className="text-xs font-mono bg-purple-600/30 text-purple-300 px-2 py-0.5 rounded hover:bg-purple-600/50 transition-colors cursor-pointer"
+              title="Click to copy room code"
+            >
+              {copied ? "Copied!" : room.id}
+            </button>
             <span className="text-xs text-gray-500">Round {room.currentRound}</span>
             <span className="text-xs text-gray-500">Base: {room.baseBet}</span>
           </div>
