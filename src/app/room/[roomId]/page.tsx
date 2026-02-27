@@ -100,7 +100,12 @@ export default function RoomPage() {
           setMyBet(d.room.baseBet);
         } else {
           console.error("[room] join failed:", d.error);
-          if (retries < 3) { retries++; setTimeout(tryJoin, 1500); }
+          if (d.settled) {
+            // Room exists but settled — fetch state directly so user can view final scores
+            const sr = await fetch(`${API}/api/room/${(roomId as string).toUpperCase()}`);
+            if (sr.ok) { const sd = await sr.json(); setRoom(sd); setShowSettle(true); joinedRef.current = true; }
+            else setRoomGone(true);
+          } else if (retries < 3) { retries++; setTimeout(tryJoin, 1500); }
           else setRoomGone(true);
         }
       }).catch(err => {
