@@ -50,7 +50,8 @@ export default function Home() {
       if (data.success) {
         localStorage.setItem("playerId", data.playerId);
         localStorage.setItem("playerName", `${avatar} ${name.trim()}`);
-        router.push(`/room/${data.roomId}`);
+        const rid = data.roomId || data.room?.id;
+        router.push(`/room/${rid}`);
       } else setError(data.error || "Failed");
     } catch { setError("Network error"); }
     setLoading(false);
