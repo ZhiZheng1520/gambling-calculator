@@ -121,7 +121,7 @@ export default function RoomPage() {
     const inputs: typeof roundInputs = {};
     room.players.filter(p => !p.isDealer).forEach(p => {
       const bet = p.bet || room.baseBet;
-      const defaultOutcome = room.game === "niuniu" ? "无牛" : "16-";
+      const defaultOutcome = room.game === "niuniu" ? "无牛" : "12-";
       let pnl = 0;
       if (room.game === "niuniu") {
         pnl = calcNiuniuPnl(defaultOutcome, dealerHand, bet);

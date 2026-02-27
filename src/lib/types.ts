@@ -87,27 +87,35 @@ export const BJ_OUTCOMES: { label: string; multiplier: number }[] = [
   { label: "Bust", multiplier: -1 },
 ];
 
-// Blackjack dealer hand options
+// Blackjack hand options (dealer typically stands on 17+)
 export const BJ_DEALER_HANDS: { label: string; labelCn: string; value: string }[] = [
-  { label: "Blackjack (21)", labelCn: "黑杰克 (21)", value: "blackjack" },
+  { label: "Blackjack", labelCn: "黑杰克 (BJ)", value: "blackjack" },
   { label: "21", labelCn: "21点", value: "21" },
   { label: "20", labelCn: "20点", value: "20" },
   { label: "19", labelCn: "19点", value: "19" },
   { label: "18", labelCn: "18点", value: "18" },
   { label: "17", labelCn: "17点", value: "17" },
-  { label: "16 or less", labelCn: "16或以下", value: "16-" },
+  { label: "16", labelCn: "16点", value: "16" },
+  { label: "15", labelCn: "15点", value: "15" },
+  { label: "14", labelCn: "14点", value: "14" },
+  { label: "13", labelCn: "13点", value: "13" },
+  { label: "12 or less", labelCn: "12或以下", value: "12-" },
   { label: "Bust (>21)", labelCn: "爆牌 (>21)", value: "bust" },
 ];
 
-// Player hand options for 21
+// Player hand options for 21 (player can stand on any value)
 export const BJ_PLAYER_HANDS: { label: string; labelCn: string; value: string }[] = [
-  { label: "Blackjack (21)", labelCn: "黑杰克 (21)", value: "blackjack" },
+  { label: "Blackjack", labelCn: "黑杰克 (BJ)", value: "blackjack" },
   { label: "21", labelCn: "21点", value: "21" },
   { label: "20", labelCn: "20点", value: "20" },
   { label: "19", labelCn: "19点", value: "19" },
   { label: "18", labelCn: "18点", value: "18" },
   { label: "17", labelCn: "17点", value: "17" },
-  { label: "16 or less", labelCn: "16或以下", value: "16-" },
+  { label: "16", labelCn: "16点", value: "16" },
+  { label: "15", labelCn: "15点", value: "15" },
+  { label: "14", labelCn: "14点", value: "14" },
+  { label: "13", labelCn: "13点", value: "13" },
+  { label: "12 or less", labelCn: "12或以下", value: "12-" },
   { label: "Bust (>21)", labelCn: "爆牌 (>21)", value: "bust" },
 ];
 
@@ -126,7 +134,7 @@ export function calcBjPnl(playerHand: string, dealerHand: string, bet: number): 
   // Dealer blackjack = player loses
   if (dealerHand === "blackjack") return -bet;
   // Compare values
-  const valMap: Record<string, number> = { "21": 21, "20": 20, "19": 19, "18": 18, "17": 17, "16-": 16 };
+  const valMap: Record<string, number> = { "21": 21, "20": 20, "19": 19, "18": 18, "17": 17, "16": 16, "15": 15, "14": 14, "13": 13, "12-": 12 };
   const pv = valMap[playerHand] || 0;
   const dv = valMap[dealerHand] || 0;
   if (pv > dv) return bet;
