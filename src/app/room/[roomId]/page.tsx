@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { NIUNIU_HANDS, BJ_DEALER_HANDS, BJ_PLAYER_HANDS, calcBjPnl } from "@/lib/types";
-import { evaluateNiuniu, evaluateBlackjack, isRed, parseCard } from "@/lib/cards";
+import { evaluateNiuniu, evaluateBlackjack, parseCard } from "@/lib/cards";
 
 const API = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -14,15 +14,17 @@ interface Settlement { from: string; to: string; amount: number; }
 
 // Card display component
 function CardView({ card, small }: { card: string; small?: boolean }) {
-  if (card === "🂠") return <span className={`inline-flex items-center justify-center ${small ? "w-8 h-11" : "w-10 h-14"} bg-blue-900 border border-blue-700 rounded-lg text-lg`}>🂠</span>;
-  const { rank, suit } = parseCard(card);
-  const red = suit === "♥" || suit === "♦";
-  return (
-    <span className={`inline-flex flex-col items-center justify-center ${small ? "w-8 h-11 text-xs" : "w-10 h-14 text-sm"} bg-white border border-gray-300 rounded-lg font-bold ${red ? "text-red-600" : "text-gray-900"}`}>
-      <span className="leading-none">{rank}</span>
-      <span className="leading-none">{suit}</span>
-    </span>
-  );
+  if (!card || card === "🂠") return <span className={`inline-flex items-center justify-center ${small ? "w-8 h-11" : "w-10 h-14"} bg-blue-900 border border-blue-700 rounded-lg text-lg`}>🂠</span>;
+  try {
+    const { rank, suit } = parseCard(card);
+    const red = suit === "♥" || suit === "♦";
+    return (
+      <span className={`inline-flex flex-col items-center justify-center ${small ? "w-8 h-11 text-xs" : "w-10 h-14 text-sm"} bg-white border border-gray-300 rounded-lg font-bold ${red ? "text-red-600" : "text-gray-900"}`}>
+        <span className="leading-none">{rank}</span>
+        <span className="leading-none">{suit}</span>
+      </span>
+    );
+  } catch { return <span className={`inline-flex items-center justify-center ${small ? "w-8 h-11" : "w-10 h-14"} bg-gray-800 border border-gray-600 rounded-lg text-xs text-gray-400`}>{card}</span>; }
 }
 
 function HandDisplay({ cards, label, eval: evalStr, small }: { cards: string[]; label?: string; eval?: string; small?: boolean }) {
