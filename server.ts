@@ -101,7 +101,7 @@ app.prepare().then(() => {
       const playerId = genPlayerId();
       const player: Player = {
         id: playerId, socketId: socket.id, name: playerName,
-        score: 0, isHost: true, isDealer: false, connected: true,
+        score: 0, isHost: true, isDealer: true, connected: true, // Creator is also dealer
         bet: baseBet || 10, // Host's initial bet
       };
       const room: Room = {

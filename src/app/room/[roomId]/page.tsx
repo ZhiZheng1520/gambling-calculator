@@ -18,7 +18,7 @@ function calcNiuniuPnl(playerHand: string, dealerHand: string, bet: number): num
   if (pr < 0 || dr < 0) return 0;
   if (pr > dr) return bet * mult(playerHand);
   if (pr < dr) return -(bet * mult(dealerHand));
-  return -(bet * mult(dealerHand)); // tie = dealer wins
+  return 0; // tie = draw
 }
 
 export default function RoomPage() {
@@ -117,12 +117,15 @@ export default function RoomPage() {
   const updatePlayerResult = (playerId: string, field: string, value: unknown) => {
     setRoundInputs(prev => {
       const p = { ...prev[playerId], [field]: value as number };
-      if (room?.game === "niuniu") {
-        p.pnl = calcNiuniuPnl(p.outcome, dealerHand, p.bet);
-      } else {
-        const bj = BJ_OUTCOMES.find(b => b.label === p.outcome);
-        p.multiplier = bj?.multiplier || 0;
-        p.pnl = Math.round(p.bet * p.multiplier * 100) / 100;
+      // Only auto-calc PnL when outcome/bet changes, not when PnL is manually edited
+      if (field !== "pnl") {
+        if (room?.game === "niuniu") {
+          p.pnl = calcNiuniuPnl(p.outcome, dealerHand, p.bet);
+        } else {
+          const bj = BJ_OUTCOMES.find(b => b.label === p.outcome);
+          p.multiplier = bj?.multiplier || 0;
+          p.pnl = Math.round(p.bet * p.multiplier * 100) / 100;
+        }
       }
       return { ...prev, [playerId]: p };
     });
@@ -269,8 +272,9 @@ export default function RoomPage() {
                   </div>
                   <div>
                     <label className="text-xs text-gray-500">P&L</label>
-                    <input type="number" value={roundInputs[p.id]?.pnl || 0} onChange={e => updatePlayerResult(p.id, "pnl", Number(e.target.value))}
-                      className={`w-full px-2 py-2 rounded-lg bg-white/5 border border-white/10 text-center font-mono text-sm ${(roundInputs[p.id]?.pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}`} />
+                    <input type="number" value={roundInputs[p.id]?.pnl ?? 0} onChange={e => updatePlayerResult(p.id, "pnl", Number(e.target.value))}
+                      className={`w-full px-2 py-2 rounded-lg bg-white/5 border border-white/10 text-center font-mono text-sm ${(roundInputs[p.id]?.pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}`}
+                      placeholder="Custom" />
                   </div>
                 </div>
               </div>
