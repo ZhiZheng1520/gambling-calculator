@@ -161,6 +161,15 @@ export default function RoomPage() {
   }, [roomId, myId]);
 
   const copyRoomCode = () => { navigator.clipboard?.writeText(room?.id || ""); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const shareRoom = async () => {
+    const url = `${window.location.origin}/room/${room?.id}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: `Join ${room?.game === "niuniu" ? "🐂 牛牛" : "🃏 21点"} Room`, text: `Room Code: ${room?.id}`, url }); } catch {}
+    } else {
+      navigator.clipboard?.writeText(url);
+      setToast("Link copied! 链接已复制");
+    }
+  };
 
   const initRoundInputs = useCallback(() => {
     if (!room) return;
@@ -326,7 +335,8 @@ export default function RoomPage() {
             <h1 className="text-xl font-bold text-white">{room.game === "niuniu" ? "牛牛" : "21点"}</h1>
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <button onClick={copyRoomCode} className="text-xs font-mono bg-purple-600/30 text-purple-300 px-2 py-0.5 rounded hover:bg-purple-600/50">{copied ? "✅ Copied!" : `${room.id} 📋`}</button>
+            <button onClick={copyRoomCode} className="text-lg font-mono font-bold tracking-[0.15em] bg-purple-600/30 text-purple-300 px-3 py-1 rounded-lg hover:bg-purple-600/50 active:scale-95 transition-all">{copied ? "✅ Copied!" : `${room.id} 📋`}</button>
+            <button onClick={shareRoom} className="text-sm bg-green-600/30 text-green-300 px-2 py-1 rounded-lg hover:bg-green-600/50 active:scale-95">🔗</button>
             <span className="text-xs text-gray-500">{room.status === "playing" ? `Round ${room.currentRound}` : room.currentRound > 0 ? `${room.currentRound} rounds` : "Ready"}</span>
             <span className="text-xs text-gray-500">👥{playerCount}</span>
           </div>
