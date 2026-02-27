@@ -86,3 +86,50 @@ export const BJ_OUTCOMES: { label: string; multiplier: number }[] = [
   { label: "Lose", multiplier: -1 },
   { label: "Bust", multiplier: -1 },
 ];
+
+// Blackjack dealer hand options
+export const BJ_DEALER_HANDS: { label: string; labelCn: string; value: string }[] = [
+  { label: "Blackjack (21)", labelCn: "黑杰克 (21)", value: "blackjack" },
+  { label: "21", labelCn: "21点", value: "21" },
+  { label: "20", labelCn: "20点", value: "20" },
+  { label: "19", labelCn: "19点", value: "19" },
+  { label: "18", labelCn: "18点", value: "18" },
+  { label: "17", labelCn: "17点", value: "17" },
+  { label: "16 or less", labelCn: "16或以下", value: "16-" },
+  { label: "Bust (>21)", labelCn: "爆牌 (>21)", value: "bust" },
+];
+
+// Player hand options for 21
+export const BJ_PLAYER_HANDS: { label: string; labelCn: string; value: string }[] = [
+  { label: "Blackjack (21)", labelCn: "黑杰克 (21)", value: "blackjack" },
+  { label: "21", labelCn: "21点", value: "21" },
+  { label: "20", labelCn: "20点", value: "20" },
+  { label: "19", labelCn: "19点", value: "19" },
+  { label: "18", labelCn: "18点", value: "18" },
+  { label: "17", labelCn: "17点", value: "17" },
+  { label: "16 or less", labelCn: "16或以下", value: "16-" },
+  { label: "Bust (>21)", labelCn: "爆牌 (>21)", value: "bust" },
+];
+
+// Calculate BJ PnL: player hand vs dealer hand
+export function calcBjPnl(playerHand: string, dealerHand: string, bet: number): number {
+  // Player bust = always lose
+  if (playerHand === "bust") return -bet;
+  // Dealer bust = player wins (unless player also bust, handled above)
+  if (dealerHand === "bust") {
+    return playerHand === "blackjack" ? bet * 1.5 : bet;
+  }
+  // Both blackjack = push
+  if (playerHand === "blackjack" && dealerHand === "blackjack") return 0;
+  // Player blackjack = 1.5x
+  if (playerHand === "blackjack") return bet * 1.5;
+  // Dealer blackjack = player loses
+  if (dealerHand === "blackjack") return -bet;
+  // Compare values
+  const valMap: Record<string, number> = { "21": 21, "20": 20, "19": 19, "18": 18, "17": 17, "16-": 16 };
+  const pv = valMap[playerHand] || 0;
+  const dv = valMap[dealerHand] || 0;
+  if (pv > dv) return bet;
+  if (pv < dv) return -bet;
+  return 0; // push
+}

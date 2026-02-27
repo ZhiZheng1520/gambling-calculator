@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { NIUNIU_HANDS, BJ_OUTCOMES } from "@/lib/types";
+import { NIUNIU_HANDS, BJ_OUTCOMES, BJ_DEALER_HANDS, BJ_PLAYER_HANDS, calcBjPnl } from "@/lib/types";
 
 const API = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -29,6 +29,7 @@ export default function RoomPage() {
   const [showRoundInput, setShowRoundInput] = useState(false);
   const [roundInputs, setRoundInputs] = useState<Record<string, { outcome: string; bet: number; multiplier: number; pnl: number; customPnl: boolean }>>({});
   const [dealerHand, setDealerHand] = useState("无牛");
+  const [bjDealerHand, setBjDealerHand] = useState("17");
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [showSettle, setShowSettle] = useState(false);
   const [adjustPlayer, setAdjustPlayer] = useState<Player | null>(null);
@@ -120,13 +121,12 @@ export default function RoomPage() {
     const inputs: typeof roundInputs = {};
     room.players.filter(p => !p.isDealer).forEach(p => {
       const bet = p.bet || room.baseBet;
-      const defaultOutcome = room.game === "niuniu" ? "无牛" : "Lose";
+      const defaultOutcome = room.game === "niuniu" ? "无牛" : "16-";
       let pnl = 0;
       if (room.game === "niuniu") {
         pnl = calcNiuniuPnl(defaultOutcome, dealerHand, bet);
       } else {
-        const bj = BJ_OUTCOMES.find(b => b.label === defaultOutcome);
-        pnl = Math.round(bet * (bj?.multiplier || -1) * 100) / 100;
+        pnl = calcBjPnl(defaultOutcome, bjDealerHand, bet);
       }
       inputs[p.id] = { outcome: defaultOutcome, bet, multiplier: 1, pnl, customPnl: false };
     });
@@ -143,9 +143,7 @@ export default function RoomPage() {
         if (room?.game === "niuniu") {
           p.pnl = calcNiuniuPnl(p.outcome, dealerHand, p.bet);
         } else {
-          const bj = BJ_OUTCOMES.find(b => b.label === p.outcome);
-          p.multiplier = bj?.multiplier || 0;
-          p.pnl = Math.round(p.bet * p.multiplier * 100) / 100;
+          p.pnl = calcBjPnl(p.outcome, bjDealerHand, p.bet);
         }
       }
       return { ...prev, [playerId]: p };
@@ -159,6 +157,19 @@ export default function RoomPage() {
       for (const pid of Object.keys(next)) {
         if (!next[pid].customPnl) {
           next[pid] = { ...next[pid], pnl: calcNiuniuPnl(next[pid].outcome, newDH, next[pid].bet) };
+        }
+      }
+      return next;
+    });
+  };
+
+  const recalcAllBj = (newDH: string) => {
+    setBjDealerHand(newDH);
+    setRoundInputs(prev => {
+      const next = { ...prev };
+      for (const pid of Object.keys(next)) {
+        if (!next[pid].customPnl) {
+          next[pid] = { ...next[pid], pnl: calcBjPnl(next[pid].outcome, newDH, next[pid].bet) };
         }
       }
       return next;
@@ -329,10 +340,13 @@ export default function RoomPage() {
             </div>
           )}
 
-          {/* 21点: Dealer result info */}
+          {/* 21点: Dealer Hand */}
           {room.game === "21" && (
             <div className="mb-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-              <label className="text-xs text-red-300 block">庄家 Dealer — select each player&apos;s result vs dealer below</label>
+              <label className="text-xs text-red-300 mb-1 block">Dealer Hand 庄家牌型</label>
+              <select value={bjDealerHand} onChange={e => recalcAllBj(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white">
+                {BJ_DEALER_HANDS.map(h => <option key={h.value} value={h.value}>{h.labelCn}</option>)}
+              </select>
             </div>
           )}
 
@@ -349,7 +363,7 @@ export default function RoomPage() {
                     <select value={roundInputs[p.id]?.outcome || ""} onChange={e => { updatePlayerResult(p.id, "outcome", e.target.value); setRoundInputs(prev => ({ ...prev, [p.id]: { ...prev[p.id], customPnl: false } })); }} className="w-full px-2 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm">
                       {room.game === "niuniu"
                         ? NIUNIU_HANDS.map(h => <option key={h.labelCn} value={h.labelCn}>{h.labelCn} ({h.multiplier}x)</option>)
-                        : BJ_OUTCOMES.map(b => <option key={b.label} value={b.label}>{b.label}</option>)
+                        : BJ_PLAYER_HANDS.map(h => <option key={h.value} value={h.value}>{h.labelCn}</option>)
                       }
                     </select>
                   </div>
