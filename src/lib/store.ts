@@ -1,5 +1,8 @@
-// In-memory store for serverless (persists between warm invocations)
-// For production, replace with Redis/Upstash
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { join } from "path";
+
+// File-based persistence so rooms survive PM2 restarts
+const STORE_PATH = join(process.cwd(), "data", "rooms.json");
 
 export interface Player {
   id: string;
@@ -43,29 +46,75 @@ export interface Settlement {
   amount: number;
 }
 
-// Global store — survives between warm Vercel invocations
-const globalStore = globalThis as unknown as { __rooms?: Map<string, Room> };
-if (!globalStore.__rooms) globalStore.__rooms = new Map();
-const rooms = globalStore.__rooms;
+// In-memory cache backed by file
+let rooms: Map<string, Room>;
+let dirty = false;
+
+function loadRooms(): Map<string, Room> {
+  try {
+    if (existsSync(STORE_PATH)) {
+      const data = JSON.parse(readFileSync(STORE_PATH, "utf-8"));
+      const map = new Map<string, Room>();
+      for (const [k, v] of Object.entries(data)) {
+        map.set(k, v as Room);
+      }
+      return map;
+    }
+  } catch { /* ignore corrupt file */ }
+  return new Map();
+}
+
+function persistRooms() {
+  if (!dirty) return;
+  try {
+    const dir = join(process.cwd(), "data");
+    if (!existsSync(dir)) {
+      const { mkdirSync } = require("fs");
+      mkdirSync(dir, { recursive: true });
+    }
+    const obj: Record<string, Room> = {};
+    rooms.forEach((v, k) => { obj[k] = v; });
+    writeFileSync(STORE_PATH, JSON.stringify(obj));
+    dirty = false;
+  } catch (e) {
+    console.error("[store] persist error:", e);
+  }
+}
+
+// Auto-persist every 2 seconds if dirty
+function initPersist() {
+  setInterval(persistRooms, 2000);
+}
+
+// Lazy init
+function getRooms(): Map<string, Room> {
+  if (!rooms) {
+    rooms = loadRooms();
+    initPersist();
+  }
+  return rooms;
+}
 
 export function getRoom(id: string): Room | undefined {
-  return rooms.get(id.toUpperCase());
+  return getRooms().get(id.toUpperCase());
 }
 
 export function setRoom(room: Room) {
   room.updatedAt = new Date().toISOString();
-  rooms.set(room.id, room);
+  getRooms().set(room.id, room);
+  dirty = true;
 }
 
 export function deleteRoom(id: string) {
-  rooms.delete(id);
+  getRooms().delete(id);
+  dirty = true;
 }
 
 export function genRoomId(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "";
   for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
-  return rooms.has(id) ? genRoomId() : id;
+  return getRooms().has(id) ? genRoomId() : id;
 }
 
 export function genPlayerId(): string {
