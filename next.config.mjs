@@ -6,7 +6,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  allowedDevOrigins: ["http://10.12.167.9:3002", "http://10.12.167.9"],
+  // Just remove the setting entirely so mode stays "warn" (not "block")
+
 };
 
 export default nextConfig;
