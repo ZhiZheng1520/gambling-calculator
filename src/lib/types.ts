@@ -8,10 +8,7 @@ export interface Player {
   connected: boolean;
 }
 
-// Niuniu hand type (internal key)
 export type NiuniuHand = 'none' | 'niu1' | 'niu2' | 'niu3' | 'niu4' | 'niu5' | 'niu6' | 'niu7' | 'niu8' | 'niu9' | 'niuniu' | 'wuhua' | 'zhadan' | 'wuxiao';
-
-// Blackjack outcome type
 export type BlackjackOutcome = 'blackjack' | 'win' | 'push' | 'lose';
 
 export interface RoundResult {
@@ -42,13 +39,8 @@ export interface Room {
   createdAt: string;
 }
 
-export interface Settlement {
-  from: string;
-  to: string;
-  amount: number;
-}
+export interface Settlement { from: string; to: string; amount: number; }
 
-// Room state used by host/play pages (server-side shape)
 export interface RoomState {
   id: string;
   game: '21' | 'niuniu';
@@ -61,7 +53,9 @@ export interface RoomState {
   pendingResults: Record<string, RoundResult>;
 }
 
-// 牛牛 hand types
+// ═══════════════════════════════════
+// 牛牛 HANDS & RULES
+// ═══════════════════════════════════
 export const NIUNIU_HANDS: { label: string; labelCn: string; value: NiuniuHand; multiplier: number }[] = [
   { label: "No Bull", labelCn: "无牛", value: "none", multiplier: 1 },
   { label: "Bull 1", labelCn: "牛1", value: "niu1", multiplier: 1 },
@@ -79,6 +73,9 @@ export const NIUNIU_HANDS: { label: string; labelCn: string; value: NiuniuHand; 
   { label: "5 Small", labelCn: "五小牛", value: "wuxiao", multiplier: 5 },
 ];
 
+// ═══════════════════════════════════
+// 21点 HANDS & RULES
+// ═══════════════════════════════════
 export const BJ_OUTCOMES: { label: string; multiplier: number }[] = [
   { label: "Blackjack", multiplier: 1.5 },
   { label: "Win", multiplier: 1 },
@@ -87,7 +84,7 @@ export const BJ_OUTCOMES: { label: string; multiplier: number }[] = [
   { label: "Bust", multiplier: -1 },
 ];
 
-// Blackjack hand options (dealer typically stands on 17+)
+// Hand value options for dealer
 export const BJ_DEALER_HANDS: { label: string; labelCn: string; value: string }[] = [
   { label: "Blackjack", labelCn: "黑杰克 (BJ)", value: "blackjack" },
   { label: "21", labelCn: "21点", value: "21" },
@@ -103,7 +100,7 @@ export const BJ_DEALER_HANDS: { label: string; labelCn: string; value: string }[
   { label: "Bust (>21)", labelCn: "爆牌 (>21)", value: "bust" },
 ];
 
-// Player hand options for 21 (player can stand on any value)
+// Hand value options for player (includes special actions)
 export const BJ_PLAYER_HANDS: { label: string; labelCn: string; value: string }[] = [
   { label: "Blackjack", labelCn: "黑杰克 (BJ)", value: "blackjack" },
   { label: "21", labelCn: "21点", value: "21" },
@@ -117,13 +114,23 @@ export const BJ_PLAYER_HANDS: { label: string; labelCn: string; value: string }[
   { label: "13", labelCn: "13点", value: "13" },
   { label: "12 or less", labelCn: "12或以下", value: "12-" },
   { label: "Bust (>21)", labelCn: "爆牌 (>21)", value: "bust" },
+  { label: "Double Down Win", labelCn: "双倍赢", value: "dd-win" },
+  { label: "Double Down Lose", labelCn: "双倍输", value: "dd-lose" },
+  { label: "Surrender", labelCn: "投降 (-半注)", value: "surrender" },
+  { label: "5-Card Charlie", labelCn: "五龙 (5牌不爆)", value: "5card" },
 ];
 
 // Calculate BJ PnL: player hand vs dealer hand
 export function calcBjPnl(playerHand: string, dealerHand: string, bet: number): number {
+  // Special actions first
+  if (playerHand === "surrender") return -(bet * 0.5);
+  if (playerHand === "dd-win") return bet * 2;
+  if (playerHand === "dd-lose") return -(bet * 2);
+  if (playerHand === "5card") return bet * 2; // 5-card Charlie = 2x win (common rule)
+
   // Player bust = always lose
   if (playerHand === "bust") return -bet;
-  // Dealer bust = player wins (unless player also bust, handled above)
+  // Dealer bust = player wins
   if (dealerHand === "bust") {
     return playerHand === "blackjack" ? bet * 1.5 : bet;
   }

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { NIUNIU_HANDS, BJ_OUTCOMES, BJ_DEALER_HANDS, BJ_PLAYER_HANDS, calcBjPnl } from "@/lib/types";
+import { NIUNIU_HANDS, BJ_DEALER_HANDS, BJ_PLAYER_HANDS, calcBjPnl } from "@/lib/types";
 
 const API = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -46,15 +46,12 @@ export default function RoomPage() {
   const isHost = me?.isHost || false;
   const isDealer = me?.isDealer || false;
   const isHostOrDealer = isHost || isDealer;
-  const isPlayer = !isDealer; // Can bet if not dealer
+  const isPlayer = !isDealer;
 
-  // Init
   useEffect(() => { setMyId(localStorage.getItem("playerId") || ""); }, []);
-
-  // Toast auto-clear
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(""), 3000); return () => clearTimeout(t); } }, [toast]);
 
-  // Join room on load
+  // Join room
   useEffect(() => {
     if (!roomId || !myId) return;
     const pname = localStorage.getItem("playerName") || "Player";
@@ -66,12 +63,9 @@ export default function RoomPage() {
         if (d.playerId) { setMyId(d.playerId); localStorage.setItem("playerId", d.playerId); }
         setRoom(d.room);
         lastUpdate.current = d.room.updatedAt;
-        setMyBet(d.room.baseBet);
-      } else {
-        // Room not found (server restarted) — redirect home
-        setRoomGone(true);
-      }
-    }).catch(() => { setRoomGone(true); });
+        setMyBet(me?.bet || d.room.baseBet);
+      } else setRoomGone(true);
+    }).catch(() => setRoomGone(true));
   }, [roomId, myId]);
 
   // Poll
@@ -137,9 +131,8 @@ export default function RoomPage() {
     setRoundInputs(prev => {
       const p = { ...prev[playerId], [field]: value as number };
       if (field === "pnl") {
-        p.customPnl = true; // Mark as manually overridden
+        p.customPnl = true;
       } else if (!p.customPnl) {
-        // Auto-calc only if not manually overridden
         if (room?.game === "niuniu") {
           p.pnl = calcNiuniuPnl(p.outcome, dealerHand, p.bet);
         } else {
@@ -188,6 +181,12 @@ export default function RoomPage() {
     setToast("Round cancelled");
   };
 
+  const undoLastRound = async () => {
+    const res = await doAction("undo-round");
+    if (res?.success) setToast("Last round undone ↩️");
+    else setToast(res?.error || "Cannot undo");
+  };
+
   const submitResults = async () => {
     const results: RoundResult[] = Object.entries(roundInputs).map(([pid, r]) => ({
       playerId: pid, playerName: room?.players.find(p => p.id === pid)?.name || "",
@@ -206,7 +205,7 @@ export default function RoomPage() {
 
   const handleCustomBet = async () => {
     const val = Number(customBet);
-    if (val > 0) {
+    if (val >= 1) {
       setMyBet(val);
       await doAction("set-bet", { bet: val });
       setToast(`Bet set to RM${val}`);
@@ -216,18 +215,20 @@ export default function RoomPage() {
   if (roomGone) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0f] gap-4">
       <div className="text-4xl">😵</div>
-      <div className="text-gray-400 text-center">Room expired or server restarted.<br/>Create a new room!</div>
+      <div className="text-gray-400 text-center">Room expired or ended.<br/>Ask host for the new room code!</div>
       <button onClick={() => router.push("/")} className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold">🏠 Back to Home</button>
     </div>
   );
 
   if (!room) return <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]"><div className="text-gray-500">Loading room...</div></div>;
 
+  const playerCount = room.players.length;
+  const dealerPlayer = room.players.find(p => p.isDealer);
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] p-4 pb-28">
-      {/* Prevent iOS zoom on input focus */}
       <style>{`input, select, textarea { font-size: 16px !important; }`}</style>
-      {/* Toast */}
+      
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-purple-600/90 text-white px-4 py-2 rounded-xl text-sm font-medium backdrop-blur animate-pulse">{toast}</div>
       )}
@@ -241,8 +242,8 @@ export default function RoomPage() {
           </div>
           <div className="flex items-center gap-2 mt-1">
             <button onClick={copyRoomCode} className="text-xs font-mono bg-purple-600/30 text-purple-300 px-2 py-0.5 rounded hover:bg-purple-600/50">{copied ? "✅ Copied!" : `${room.id} 📋`}</button>
-            <span className="text-xs text-gray-500">{room.status === "playing" ? `Round ${room.currentRound}` : room.currentRound > 0 ? `${room.currentRound} rounds played` : "Ready"}</span>
-            <span className="text-xs text-gray-500">Base: {room.baseBet}</span>
+            <span className="text-xs text-gray-500">{room.status === "playing" ? `Round ${room.currentRound}` : room.currentRound > 0 ? `${room.currentRound} rounds` : "Ready"}</span>
+            <span className="text-xs text-gray-500">👥{playerCount}</span>
           </div>
         </div>
         <div className="text-right">
@@ -255,10 +256,10 @@ export default function RoomPage() {
         </div>
       </div>
 
-      {/* Player Bet Selector (any non-dealer player, including host if not dealer) */}
+      {/* Bet Selector (any non-dealer player) */}
       {isPlayer && room.status === "waiting" && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 mb-4">
-          <h2 className="text-sm font-medium text-gray-400 mb-2">Your Bet 你的注</h2>
+          <h2 className="text-sm font-medium text-gray-400 mb-2">Your Bet 你的注 <span className="text-xs text-gray-600">(current: RM{myBet || room.baseBet})</span></h2>
           <div className="flex gap-2 mb-2">
             {[1,2,3,5,10].map(amt => (
               <button key={amt} onClick={() => setBet(amt)} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 ${myBet === amt && !customBet ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg" : "bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10"}`}>RM{amt}</button>
@@ -277,21 +278,20 @@ export default function RoomPage() {
         <div className="space-y-2">
           {room.players.sort((a, b) => b.score - a.score).map(p => (
             <div key={p.id} className={`flex items-center justify-between p-3 rounded-xl ${p.id === myId ? "bg-purple-500/10 border border-purple-500/20" : "bg-white/[0.03]"}`}>
-              <div className="flex items-center gap-2">
-                <span className="text-white font-medium">{p.name}</span>
-                {p.isHost && <span className="text-xs text-yellow-400">👑</span>}
-                {p.isDealer && <span className="text-xs bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded font-bold">庄</span>}
-                {!p.isDealer && <span className="text-xs text-gray-600">bet: {p.bet || room.baseBet}</span>}
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-white font-medium truncate">{p.name}</span>
+                {p.isHost && <span className="text-xs text-yellow-400 shrink-0">👑</span>}
+                {p.isDealer && <span className="text-xs bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded font-bold shrink-0">庄</span>}
+                {!p.isDealer && <span className="text-xs text-gray-600 shrink-0">RM{p.bet || room.baseBet}</span>}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-lg font-bold font-mono ${p.score >= 0 ? "text-green-400" : "text-red-400"}`}>{p.score >= 0 ? "+" : ""}{p.score}</span>
                 {isHost && (
                   <div className="flex gap-1">
-                    {p.id !== myId && !p.isDealer && <button onClick={() => doAction("set-dealer", { targetPlayerId: p.id })} className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-300">庄</button>}
-                    {p.id === myId && !isDealer && <button onClick={() => doAction("set-dealer", { targetPlayerId: p.id })} className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-300">庄</button>}
-                    {p.id !== myId && <button onClick={() => doAction("transfer-host", { targetPlayerId: p.id })} className="text-xs px-2 py-1 rounded bg-yellow-500/20 text-yellow-300">👑</button>}
-                    <button onClick={() => { setAdjustPlayer(p); setAdjustAmount(0); }} className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-300">±</button>
-                    {p.id !== myId && <button onClick={() => doAction("kick-player", { targetPlayerId: p.id })} className="text-xs px-2 py-1 rounded bg-gray-500/20 text-gray-400">✕</button>}
+                    {!p.isDealer && <button onClick={() => doAction("set-dealer", { targetPlayerId: p.id })} className="text-xs px-1.5 py-1 rounded bg-red-500/20 text-red-300">庄</button>}
+                    {p.id !== myId && <button onClick={() => doAction("transfer-host", { targetPlayerId: p.id })} className="text-xs px-1.5 py-1 rounded bg-yellow-500/20 text-yellow-300">👑</button>}
+                    <button onClick={() => { setAdjustPlayer(p); setAdjustAmount(0); }} className="text-xs px-1.5 py-1 rounded bg-blue-500/20 text-blue-300">±</button>
+                    {p.id !== myId && <button onClick={() => doAction("kick-player", { targetPlayerId: p.id })} className="text-xs px-1.5 py-1 rounded bg-gray-500/20 text-gray-400">✕</button>}
                   </div>
                 )}
               </div>
@@ -355,13 +355,13 @@ export default function RoomPage() {
             {room.players.filter(p => !p.isDealer).map(p => (
               <div key={p.id} className="p-3 rounded-xl bg-white/[0.03]">
                 <div className="flex justify-between text-white font-medium mb-2">
-                  <span>{p.name}</span>
-                  <span className="text-xs text-gray-500">Bet: RM{roundInputs[p.id]?.bet || p.bet || room.baseBet}</span>
+                  <span className="truncate">{p.name}</span>
+                  <span className="text-xs text-gray-500 shrink-0">Bet: RM{roundInputs[p.id]?.bet || p.bet || room.baseBet}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-xs text-gray-500">Result</label>
-                    <select value={roundInputs[p.id]?.outcome || ""} onChange={e => { updatePlayerResult(p.id, "outcome", e.target.value); setRoundInputs(prev => ({ ...prev, [p.id]: { ...prev[p.id], customPnl: false } })); }} className="w-full px-2 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm">
+                    <select value={roundInputs[p.id]?.outcome || ""} onChange={e => { updatePlayerResult(p.id, "outcome", e.target.value); setRoundInputs(prev => ({ ...prev, [p.id]: { ...prev[p.id], customPnl: false } })); }} className="w-full px-2 py-2 rounded-lg bg-white/5 border border-white/10 text-white">
                       {room.game === "niuniu"
                         ? NIUNIU_HANDS.map(h => <option key={h.labelCn} value={h.labelCn}>{h.labelCn} ({h.multiplier}x)</option>)
                         : BJ_PLAYER_HANDS.map(h => <option key={h.value} value={h.value}>{h.labelCn}</option>)
@@ -371,20 +371,21 @@ export default function RoomPage() {
                   <div>
                     <label className="text-xs text-gray-500">P&L {roundInputs[p.id]?.customPnl && <span className="text-orange-400">(custom)</span>}</label>
                     <input type="text" inputMode="numeric" value={roundInputs[p.id]?.pnl ?? 0} onChange={e => { const v = e.target.value; updatePlayerResult(p.id, "pnl", v === "" || v === "-" ? 0 : Number(v)); }}
-                      className={`w-full px-2 py-2 rounded-lg border text-center font-mono text-sm ${roundInputs[p.id]?.customPnl ? "bg-orange-500/10 border-orange-500/30" : "bg-white/5 border-white/10"} ${(roundInputs[p.id]?.pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}`}
+                      className={`w-full px-2 py-2 rounded-lg border text-center font-mono ${roundInputs[p.id]?.customPnl ? "bg-orange-500/10 border-orange-500/30" : "bg-white/5 border-white/10"} ${(roundInputs[p.id]?.pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}`}
                       placeholder="Custom" />
                   </div>
                 </div>
               </div>
             ))}
           </div>
+
           {/* Dealer PnL preview */}
           {Object.keys(roundInputs).length > 0 && (() => {
             const totalPlayerPnl = Object.values(roundInputs).reduce((s, r) => s + (r.pnl || 0), 0);
             const dealerPnl = -totalPlayerPnl;
             return (
               <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex justify-between items-center">
-                <span className="text-sm text-red-300">庄家 Dealer P&L:</span>
+                <span className="text-sm text-red-300">庄家 {dealerPlayer?.name?.split(" ").pop() || "Dealer"} P&L:</span>
                 <span className={`text-lg font-bold font-mono ${dealerPnl >= 0 ? "text-green-400" : "text-red-400"}`}>{dealerPnl >= 0 ? "+" : ""}{Math.round(dealerPnl * 100) / 100}</span>
               </div>
             );
@@ -396,7 +397,12 @@ export default function RoomPage() {
       {/* Round History */}
       {room.rounds.length > 0 && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 mb-4">
-          <h2 className="text-sm font-medium text-gray-400 mb-3">Round History</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-gray-400">Round History</h2>
+            {isHostOrDealer && !showRoundInput && (
+              <button onClick={undoLastRound} className="text-xs px-3 py-1 rounded-lg bg-orange-500/20 text-orange-400 hover:bg-orange-500/30">↩️ Undo Last</button>
+            )}
+          </div>
           <div className="space-y-2">
             {[...room.rounds].reverse().map(r => (
               <div key={r.number} className="p-3 rounded-xl bg-white/[0.03]">
@@ -455,8 +461,8 @@ export default function RoomPage() {
       {isHostOrDealer && room.status !== "settled" && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#0a0a0f] via-[#0a0a0f] to-transparent">
           <div className="flex gap-3 max-w-md mx-auto">
-            {!showRoundInput && <button onClick={startRound} className="flex-1 py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-lg font-bold active:scale-95 transition-all">🎲 New Round 新一轮</button>}
-            <button onClick={() => { doAction("end-session"); setShowSettle(true); }} className="py-4 px-6 rounded-2xl bg-red-600/20 hover:bg-red-600/30 text-red-400 font-bold active:scale-95 border border-red-500/20">End 结束</button>
+            {!showRoundInput && <button onClick={startRound} className="flex-1 py-4 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-lg font-bold active:scale-95 transition-all">🎲 New Round</button>}
+            <button onClick={() => { doAction("end-session"); setShowSettle(true); }} className="py-4 px-6 rounded-2xl bg-red-600/20 hover:bg-red-600/30 text-red-400 font-bold active:scale-95 border border-red-500/20">End</button>
           </div>
         </div>
       )}

@@ -82,8 +82,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
     }
 
     case "set-bet": {
-      // Player sets their own bet
-      caller.bet = body.bet || room.baseBet;
+      // Player sets their own bet — any amount ≥ 1 allowed (no base minimum)
+      const betAmt = Number(body.bet) || room.baseBet;
+      caller.bet = Math.max(1, betAmt);
+      break;
+    }
+
+    case "undo-round": {
+      if (!isHostOrDealer) return NextResponse.json({ error: "Not host/dealer" }, { status: 403 });
+      if (room.rounds.length === 0) return NextResponse.json({ error: "No rounds to undo" }, { status: 400 });
+      const lastRound = room.rounds[room.rounds.length - 1];
+      // Reverse the score changes
+      for (const r of lastRound.results) {
+        const player = room.players.find(p => p.id === r.playerId);
+        if (player) {
+          player.score = Math.round((player.score - r.pnl) * 100) / 100;
+        }
+      }
+      room.rounds.pop();
+      room.currentRound = Math.max(0, room.currentRound - 1);
+      room.status = "waiting";
       break;
     }
 
