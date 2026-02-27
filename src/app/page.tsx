@@ -13,6 +13,7 @@ export default function Home() {
   const [roomCode, setRoomCode] = useState("");
   const [game, setGame] = useState<"21"|"niuniu">("niuniu");
   const [baseBet, setBaseBet] = useState(10);
+  const [useCards, setUseCards] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -24,7 +25,7 @@ export default function Home() {
     try {
       const res = await fetch(`${API}/api/room`, {
         method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ game, playerName: `${avatar} ${name.trim()}`, baseBet }),
+        body: JSON.stringify({ game, playerName: `${avatar} ${name.trim()}`, baseBet, useCards }),
       });
       const data = await res.json();
       if (data.success) {
@@ -105,6 +106,15 @@ export default function Home() {
                     ))}
                   </div>
                   <input type="number" value={baseBet} onChange={e => setBaseBet(Number(e.target.value))} className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-lg focus:outline-none focus:border-purple-500/50" placeholder="Custom amount" />
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+                  <div>
+                    <div className="text-white text-sm font-medium">🃏 Digital Cards 电子发牌</div>
+                    <div className="text-xs text-gray-500">Auto-deal & evaluate hands</div>
+                  </div>
+                  <button onClick={() => setUseCards(!useCards)} className={`w-14 h-7 rounded-full transition-all relative ${useCards ? "bg-purple-600" : "bg-gray-700"}`}>
+                    <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all ${useCards ? "left-8" : "left-1"}`} />
+                  </button>
                 </div>
                 {error && <div className="text-red-400 text-sm">{error}</div>}
                 <button onClick={handleCreate} disabled={loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-lg font-bold disabled:opacity-50 active:scale-95 transition-all">{loading ? "Creating..." : "🚀 Create Room"}</button>

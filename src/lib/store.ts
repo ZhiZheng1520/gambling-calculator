@@ -36,6 +36,11 @@ export interface Room {
   status: "waiting" | "playing" | "settled";
   currentRound: number;
   baseBet: number;
+  useCards: boolean;         // digital card dealing enabled
+  deck?: string[];           // remaining cards in deck
+  hands?: Record<string, string[]>;  // playerId → cards
+  dealerCards?: string[];    // dealer's cards
+  bjPlayerStatus?: Record<string, "playing" | "stand" | "bust" | "blackjack" | "dd">; // 21点 player states
   createdAt: string;
   updatedAt: string;
 }

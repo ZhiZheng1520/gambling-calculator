@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRoom, setRoom, calculateSettlement, type RoundResult } from "@/lib/store";
+import { dealNiuniu, dealBlackjack, evaluateBlackjack, evaluateNiuniu } from "@/lib/cards";
 
 // POST /api/room/[roomId]/action — All room actions
 export async function POST(req: Request, { params }: { params: Promise<{ roomId: string }> }) {
@@ -116,6 +117,86 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
     case "kick-player": {
       if (!caller.isHost) return NextResponse.json({ error: "Not host" }, { status: 403 });
       room.players = room.players.filter(p => p.id !== body.targetPlayerId);
+      break;
+    }
+
+    case "deal-cards": {
+      if (!isHostOrDealer) return NextResponse.json({ error: "Not host/dealer" }, { status: 403 });
+      if (!room.useCards) return NextResponse.json({ error: "Cards not enabled" }, { status: 400 });
+      const dealer = room.players.find(p => p.isDealer);
+      const playerIds = room.players.filter(p => !p.isDealer).map(p => p.id);
+      if (!dealer) return NextResponse.json({ error: "No dealer" }, { status: 400 });
+
+      if (room.game === "niuniu") {
+        const deal = dealNiuniu(playerIds, dealer.id);
+        room.deck = deal.deck;
+        room.hands = deal.hands;
+        room.dealerCards = deal.dealerCards;
+      } else {
+        const deal = dealBlackjack(playerIds, dealer.id);
+        room.deck = deal.deck;
+        room.hands = deal.hands;
+        room.dealerCards = deal.dealerCards;
+        // Init player statuses
+        room.bjPlayerStatus = {};
+        for (const pid of playerIds) {
+          const eval_ = evaluateBlackjack(deal.hands[pid]);
+          room.bjPlayerStatus[pid] = eval_.isBlackjack ? "blackjack" : "playing";
+        }
+      }
+      break;
+    }
+
+    case "hit": {
+      // 21点: player requests one more card
+      if (!room.useCards || room.game !== "21") return NextResponse.json({ error: "Not applicable" }, { status: 400 });
+      if (!room.hands?.[playerId] || !room.deck) return NextResponse.json({ error: "No cards dealt" }, { status: 400 });
+      if (room.bjPlayerStatus?.[playerId] !== "playing") return NextResponse.json({ error: "Cannot hit" }, { status: 400 });
+      
+      room.hands[playerId].push(room.deck.splice(0, 1)[0]);
+      const eval_ = evaluateBlackjack(room.hands[playerId]);
+      if (eval_.isBust) room.bjPlayerStatus![playerId] = "bust";
+      else if (eval_.total === 21) room.bjPlayerStatus![playerId] = "stand";
+      break;
+    }
+
+    case "stand": {
+      // 21点: player stands
+      if (!room.useCards || room.game !== "21") return NextResponse.json({ error: "Not applicable" }, { status: 400 });
+      if (room.bjPlayerStatus?.[playerId] !== "playing") return NextResponse.json({ error: "Cannot stand" }, { status: 400 });
+      room.bjPlayerStatus![playerId] = "stand";
+      break;
+    }
+
+    case "double-down": {
+      // 21点: player doubles bet, gets exactly 1 card, then auto-stand
+      if (!room.useCards || room.game !== "21") return NextResponse.json({ error: "Not applicable" }, { status: 400 });
+      if (!room.hands?.[playerId] || room.hands[playerId].length !== 2) return NextResponse.json({ error: "Can only double on first 2 cards" }, { status: 400 });
+      if (room.bjPlayerStatus?.[playerId] !== "playing") return NextResponse.json({ error: "Cannot double" }, { status: 400 });
+      
+      // Double the player's bet
+      const ddPlayer = room.players.find(p => p.id === playerId);
+      if (ddPlayer) ddPlayer.bet = (ddPlayer.bet || room.baseBet) * 2;
+      
+      // Deal one card
+      room.hands[playerId].push(room.deck!.splice(0, 1)[0]);
+      const ddEval = evaluateBlackjack(room.hands[playerId]);
+      room.bjPlayerStatus![playerId] = ddEval.isBust ? "bust" : "dd";
+      break;
+    }
+
+    case "dealer-play": {
+      // 21点: dealer reveals and plays (hit until 17+)
+      if (!isHostOrDealer) return NextResponse.json({ error: "Not host/dealer" }, { status: 403 });
+      if (!room.useCards || room.game !== "21") return NextResponse.json({ error: "Not applicable" }, { status: 400 });
+      if (!room.dealerCards || !room.deck) return NextResponse.json({ error: "No cards dealt" }, { status: 400 });
+      
+      // Dealer hits until 17+
+      let dealerEval = evaluateBlackjack(room.dealerCards);
+      while (dealerEval.total < 17 && !dealerEval.isBust) {
+        room.dealerCards.push(room.deck.splice(0, 1)[0]);
+        dealerEval = evaluateBlackjack(room.dealerCards);
+      }
       break;
     }
 

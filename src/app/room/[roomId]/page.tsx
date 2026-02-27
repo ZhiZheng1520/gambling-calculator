@@ -2,14 +2,38 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { NIUNIU_HANDS, BJ_DEALER_HANDS, BJ_PLAYER_HANDS, calcBjPnl } from "@/lib/types";
+import { evaluateNiuniu, evaluateBlackjack, isRed, parseCard } from "@/lib/cards";
 
 const API = typeof window !== "undefined" ? window.location.origin : "";
 
 interface Player { id: string; name: string; score: number; isHost: boolean; isDealer: boolean; bet: number; }
 interface RoundResult { playerId: string; playerName: string; bet: number; outcome: string; multiplier: number; pnl: number; }
 interface Round { number: number; results: RoundResult[]; timestamp: string; }
-interface Room { id: string; game: "21"|"niuniu"; players: Player[]; rounds: Round[]; status: string; currentRound: number; baseBet: number; updatedAt: string; }
+interface Room { id: string; game: "21"|"niuniu"; players: Player[]; rounds: Round[]; status: string; currentRound: number; baseBet: number; updatedAt: string; useCards: boolean; hands?: Record<string, string[]>; dealerCards?: string[]; bjPlayerStatus?: Record<string, string>; }
 interface Settlement { from: string; to: string; amount: number; }
+
+// Card display component
+function CardView({ card, small }: { card: string; small?: boolean }) {
+  if (card === "🂠") return <span className={`inline-flex items-center justify-center ${small ? "w-8 h-11" : "w-10 h-14"} bg-blue-900 border border-blue-700 rounded-lg text-lg`}>🂠</span>;
+  const { rank, suit } = parseCard(card);
+  const red = suit === "♥" || suit === "♦";
+  return (
+    <span className={`inline-flex flex-col items-center justify-center ${small ? "w-8 h-11 text-xs" : "w-10 h-14 text-sm"} bg-white border border-gray-300 rounded-lg font-bold ${red ? "text-red-600" : "text-gray-900"}`}>
+      <span className="leading-none">{rank}</span>
+      <span className="leading-none">{suit}</span>
+    </span>
+  );
+}
+
+function HandDisplay({ cards, label, eval: evalStr, small }: { cards: string[]; label?: string; eval?: string; small?: boolean }) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {label && <span className="text-xs text-gray-500 mr-1">{label}</span>}
+      {cards.map((c, i) => <CardView key={i} card={c} small={small} />)}
+      {evalStr && <span className="text-xs font-bold text-yellow-400 ml-1">{evalStr}</span>}
+    </div>
+  );
+}
 
 function calcNiuniuPnl(playerHand: string, dealerHand: string, bet: number): number {
   const handRank = (h: string) => NIUNIU_HANDS.findIndex(x => x.labelCn === h);
@@ -74,7 +98,8 @@ export default function RoomPage() {
     let active = true;
     const poll = async () => {
       try {
-        const res = await fetch(`${API}/api/room/${(roomId as string).toUpperCase()}`);
+        const pid = localStorage.getItem("playerId") || "";
+        const res = await fetch(`${API}/api/room/${(roomId as string).toUpperCase()}?playerId=${pid}`);
         if (res.status === 404) { setRoomGone(true); return; }
         if (res.ok) {
           const data: Room = await res.json();
@@ -113,14 +138,47 @@ export default function RoomPage() {
   const initRoundInputs = useCallback(() => {
     if (!room) return;
     const inputs: typeof roundInputs = {};
+    
+    // If cards are dealt, auto-evaluate hands
+    let autoDealerHand = dealerHand;
+    let autoBjDealerHand = bjDealerHand;
+    if (room.useCards && room.dealerCards && room.dealerCards.every(c => c !== "🂠")) {
+      if (room.game === "niuniu") {
+        const dEval = evaluateNiuniu(room.dealerCards);
+        autoDealerHand = dEval.hand;
+        setDealerHand(dEval.hand);
+      } else {
+        const dEval = evaluateBlackjack(room.dealerCards);
+        autoBjDealerHand = dEval.isBust ? "bust" : dEval.isBlackjack ? "blackjack" : dEval.total.toString();
+        if (dEval.total <= 12 && !dEval.isBust && !dEval.isBlackjack) autoBjDealerHand = "12-";
+        setBjDealerHand(autoBjDealerHand);
+      }
+    }
+    
     room.players.filter(p => !p.isDealer).forEach(p => {
       const bet = p.bet || room.baseBet;
-      const defaultOutcome = room.game === "niuniu" ? "无牛" : "12-";
+      let defaultOutcome = room.game === "niuniu" ? "无牛" : "12-";
+      
+      // Auto-evaluate from cards if available
+      if (room.useCards && room.hands?.[p.id] && room.hands[p.id].every((c: string) => c !== "🂠")) {
+        if (room.game === "niuniu") {
+          const pEval = evaluateNiuniu(room.hands[p.id]);
+          defaultOutcome = pEval.hand;
+        } else {
+          const pEval = evaluateBlackjack(room.hands[p.id]);
+          const bjStatus = room.bjPlayerStatus?.[p.id];
+          if (pEval.isBust || bjStatus === "bust") defaultOutcome = "bust";
+          else if (pEval.isBlackjack) defaultOutcome = "blackjack";
+          else if (bjStatus === "dd") defaultOutcome = pEval.total > 21 ? "dd-lose" : "dd-win"; // simplified
+          else defaultOutcome = pEval.total <= 12 ? "12-" : pEval.total.toString();
+        }
+      }
+      
       let pnl = 0;
       if (room.game === "niuniu") {
-        pnl = calcNiuniuPnl(defaultOutcome, dealerHand, bet);
+        pnl = calcNiuniuPnl(defaultOutcome, autoDealerHand, bet);
       } else {
-        pnl = calcBjPnl(defaultOutcome, bjDealerHand, bet);
+        pnl = calcBjPnl(defaultOutcome, autoBjDealerHand, bet);
       }
       inputs[p.id] = { outcome: defaultOutcome, bet, multiplier: 1, pnl, customPnl: false };
     });
@@ -269,6 +327,87 @@ export default function RoomPage() {
             <input type="text" inputMode="decimal" value={customBet} onChange={e => setCustomBet(e.target.value)} placeholder="Custom 自定义" className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-purple-500/50" />
             <button onClick={handleCustomBet} className="px-4 py-2 rounded-xl bg-purple-600/30 text-purple-300 text-sm font-bold hover:bg-purple-600/50">Set</button>
           </div>
+        </div>
+      )}
+
+      {/* Cards Section (when useCards is enabled) */}
+      {room.useCards && room.hands && (
+        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-4 mb-4">
+          <h2 className="text-sm font-medium text-purple-400 mb-3">🃏 Cards</h2>
+          
+          {/* Dealer cards */}
+          {room.dealerCards && room.dealerCards.length > 0 && (
+            <div className="mb-3 p-2 rounded-xl bg-red-500/10 border border-red-500/20">
+              <div className="text-xs text-red-300 mb-1">庄家 Dealer</div>
+              <HandDisplay cards={room.dealerCards} eval={
+                isHostOrDealer && room.dealerCards.every(c => c !== "🂠")
+                  ? room.game === "niuniu" 
+                    ? evaluateNiuniu(room.dealerCards).hand
+                    : evaluateBlackjack(room.dealerCards).display
+                  : undefined
+              } />
+            </div>
+          )}
+
+          {/* Player hands */}
+          {room.players.filter(p => !p.isDealer && room.hands?.[p.id]).map(p => {
+            const cards = room.hands![p.id];
+            const isMine = p.id === myId;
+            const realCards = cards.filter(c => c !== "🂠");
+            let evalStr: string | undefined;
+            if (isMine || isHostOrDealer) {
+              if (room.game === "niuniu" && realCards.length === 5) {
+                const result = evaluateNiuniu(realCards);
+                evalStr = `${result.hand} (${result.multiplier}x)`;
+              } else if (room.game === "21" && realCards.length >= 2) {
+                const result = evaluateBlackjack(realCards);
+                evalStr = result.display;
+              }
+            }
+            const bjStatus = room.bjPlayerStatus?.[p.id];
+            
+            return (
+              <div key={p.id} className={`mb-2 p-2 rounded-xl ${isMine ? "bg-purple-500/10 border border-purple-500/20" : "bg-white/[0.03]"}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-gray-400">{p.name}{isMine ? " (you)" : ""}</span>
+                  {bjStatus && <span className={`text-xs px-2 py-0.5 rounded ${bjStatus === "bust" ? "bg-red-500/20 text-red-400" : bjStatus === "blackjack" ? "bg-yellow-500/20 text-yellow-400" : bjStatus === "stand" || bjStatus === "dd" ? "bg-green-500/20 text-green-400" : "bg-blue-500/20 text-blue-400"}`}>{bjStatus}</span>}
+                </div>
+                <HandDisplay cards={cards} eval={evalStr} />
+                
+                {/* 21点 player actions (only for own hand) */}
+                {isMine && !isDealer && room.game === "21" && bjStatus === "playing" && (
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => doAction("hit")} className="flex-1 py-2 rounded-lg bg-green-600/30 text-green-400 font-bold text-sm active:scale-95">Hit 要牌</button>
+                    <button onClick={() => doAction("stand")} className="flex-1 py-2 rounded-lg bg-yellow-600/30 text-yellow-400 font-bold text-sm active:scale-95">Stand 停牌</button>
+                    {cards.length === 2 && <button onClick={() => doAction("double-down")} className="flex-1 py-2 rounded-lg bg-purple-600/30 text-purple-400 font-bold text-sm active:scale-95">Double 双倍</button>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Deal / Dealer Play buttons */}
+          {isHostOrDealer && (
+            <div className="flex gap-2 mt-2">
+              {!room.hands || Object.keys(room.hands).length === 0 ? (
+                <button onClick={() => doAction("deal-cards")} className="flex-1 py-2 rounded-lg bg-purple-600 text-white font-bold text-sm active:scale-95">🎴 Deal Cards 发牌</button>
+              ) : (
+                <>
+                  <button onClick={() => doAction("deal-cards")} className="flex-1 py-2 rounded-lg bg-purple-600/30 text-purple-400 font-bold text-sm active:scale-95">🔄 Re-Deal</button>
+                  {room.game === "21" && (
+                    <button onClick={() => doAction("dealer-play")} className="flex-1 py-2 rounded-lg bg-red-600/30 text-red-400 font-bold text-sm active:scale-95">庄家开牌 Reveal</button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Deal button when useCards but no cards yet */}
+      {room.useCards && !room.hands && isHostOrDealer && room.status === "playing" && (
+        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-4 mb-4 text-center">
+          <button onClick={() => doAction("deal-cards")} className="py-3 px-8 rounded-xl bg-purple-600 text-white font-bold text-lg active:scale-95">🎴 Deal Cards 发牌</button>
         </div>
       )}
 
