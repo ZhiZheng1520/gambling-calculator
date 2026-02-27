@@ -37,6 +37,7 @@ export default function RoomPage() {
   const [myBet, setMyBet] = useState(0);
   const [customBet, setCustomBet] = useState("");
   const [toast, setToast] = useState("");
+  const [roomGone, setRoomGone] = useState(false);
   const lastUpdate = useRef("");
   const prevRound = useRef(0);
 
@@ -65,8 +66,11 @@ export default function RoomPage() {
         setRoom(d.room);
         lastUpdate.current = d.room.updatedAt;
         setMyBet(d.room.baseBet);
+      } else {
+        // Room not found (server restarted) — redirect home
+        setRoomGone(true);
       }
-    }).catch(() => {});
+    }).catch(() => { setRoomGone(true); });
   }, [roomId, myId]);
 
   // Poll
@@ -76,6 +80,7 @@ export default function RoomPage() {
     const poll = async () => {
       try {
         const res = await fetch(`${API}/api/room/${(roomId as string).toUpperCase()}`);
+        if (res.status === 404) { setRoomGone(true); return; }
         if (res.ok) {
           const data: Room = await res.json();
           if (data.updatedAt !== lastUpdate.current) {
@@ -195,6 +200,14 @@ export default function RoomPage() {
       setToast(`Bet set to RM${val}`);
     }
   };
+
+  if (roomGone) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0f] gap-4">
+      <div className="text-4xl">😵</div>
+      <div className="text-gray-400 text-center">Room expired or server restarted.<br/>Create a new room!</div>
+      <button onClick={() => router.push("/")} className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold">🏠 Back to Home</button>
+    </div>
+  );
 
   if (!room) return <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]"><div className="text-gray-500">Loading room...</div></div>;
 
