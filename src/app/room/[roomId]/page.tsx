@@ -278,7 +278,16 @@ export default function RoomPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setAdjustPlayer(null)}>
           <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm border border-white/10" onClick={e => e.stopPropagation()}>
             <h3 className="text-white font-bold mb-4">Adjust {adjustPlayer.name}</h3>
-            <input type="number" value={adjustAmount} onChange={e => setAdjustAmount(Number(e.target.value))} className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-lg text-center mb-4" />
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={() => setAdjustAmount(a => a - 1)} className="w-12 h-12 rounded-xl bg-red-500/20 text-red-400 text-2xl font-bold active:scale-95">−</button>
+              <input type="text" inputMode="numeric" value={adjustAmount} onChange={e => { const v = e.target.value; if (v === "" || v === "-") setAdjustAmount(0 as unknown as number); else setAdjustAmount(Number(v)); }} className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-lg text-center" placeholder="0" />
+              <button onClick={() => setAdjustAmount(a => a + 1)} className="w-12 h-12 rounded-xl bg-green-500/20 text-green-400 text-2xl font-bold active:scale-95">+</button>
+            </div>
+            <div className="flex gap-2 mb-4">
+              {[-10,-5,-1,1,5,10].map(v => (
+                <button key={v} onClick={() => setAdjustAmount(v)} className={`flex-1 py-2 rounded-lg text-sm font-bold ${v < 0 ? "bg-red-500/20 text-red-400" : "bg-green-500/20 text-green-400"}`}>{v > 0 ? "+" : ""}{v}</button>
+              ))}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => setAdjustPlayer(null)} className="py-2 rounded-xl bg-white/10 text-gray-400">Cancel</button>
               <button onClick={() => { doAction("adjust-score", { targetPlayerId: adjustPlayer.id, amount: adjustAmount }); setAdjustPlayer(null); }} className="py-2 rounded-xl bg-purple-600 text-white font-bold">Apply</button>
@@ -331,7 +340,7 @@ export default function RoomPage() {
                   </div>
                   <div>
                     <label className="text-xs text-gray-500">P&L {roundInputs[p.id]?.customPnl && <span className="text-orange-400">(custom)</span>}</label>
-                    <input type="number" value={roundInputs[p.id]?.pnl ?? 0} onChange={e => updatePlayerResult(p.id, "pnl", Number(e.target.value))}
+                    <input type="text" inputMode="numeric" value={roundInputs[p.id]?.pnl ?? 0} onChange={e => { const v = e.target.value; updatePlayerResult(p.id, "pnl", v === "" || v === "-" ? 0 : Number(v)); }}
                       className={`w-full px-2 py-2 rounded-lg border text-center font-mono text-sm ${roundInputs[p.id]?.customPnl ? "bg-orange-500/10 border-orange-500/30" : "bg-white/5 border-white/10"} ${(roundInputs[p.id]?.pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}`}
                       placeholder="Custom" />
                   </div>
