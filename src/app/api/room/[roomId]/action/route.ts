@@ -67,6 +67,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
       break;
     }
 
+    case "cancel-round": {
+      if (!isHostOrDealer) return NextResponse.json({ error: "Not host/dealer" }, { status: 403 });
+      // Remove last empty round and revert state
+      if (room.rounds.length > 0) {
+        const lastRound = room.rounds[room.rounds.length - 1];
+        if (lastRound.results.length === 0) {
+          room.rounds.pop();
+          room.currentRound = Math.max(0, room.currentRound - 1);
+        }
+      }
+      room.status = "waiting";
+      break;
+    }
+
     case "set-bet": {
       // Player sets their own bet
       caller.bet = body.bet || room.baseBet;

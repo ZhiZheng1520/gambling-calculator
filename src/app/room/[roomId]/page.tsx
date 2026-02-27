@@ -131,7 +131,7 @@ export default function RoomPage() {
       inputs[p.id] = { outcome: defaultOutcome, bet, multiplier: 1, pnl, customPnl: false };
     });
     setRoundInputs(inputs);
-  }, [room, dealerHand]);
+  }, [room, dealerHand, bjDealerHand]);
 
   const updatePlayerResult = (playerId: string, field: string, value: unknown) => {
     setRoundInputs(prev => {
@@ -182,7 +182,8 @@ export default function RoomPage() {
     setShowRoundInput(true);
   };
 
-  const cancelRound = () => {
+  const cancelRound = async () => {
+    await doAction("cancel-round");
     setShowRoundInput(false);
     setToast("Round cancelled");
   };
@@ -240,7 +241,7 @@ export default function RoomPage() {
           </div>
           <div className="flex items-center gap-2 mt-1">
             <button onClick={copyRoomCode} className="text-xs font-mono bg-purple-600/30 text-purple-300 px-2 py-0.5 rounded hover:bg-purple-600/50">{copied ? "✅ Copied!" : `${room.id} 📋`}</button>
-            <span className="text-xs text-gray-500">Round {room.currentRound}</span>
+            <span className="text-xs text-gray-500">{room.status === "playing" ? `Round ${room.currentRound}` : room.currentRound > 0 ? `${room.currentRound} rounds played` : "Ready"}</span>
             <span className="text-xs text-gray-500">Base: {room.baseBet}</span>
           </div>
         </div>
@@ -264,7 +265,7 @@ export default function RoomPage() {
             ))}
           </div>
           <div className="flex gap-2">
-            <input type="number" value={customBet} onChange={e => setCustomBet(e.target.value)} placeholder="Custom 自定义" className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-purple-500/50" />
+            <input type="text" inputMode="decimal" value={customBet} onChange={e => setCustomBet(e.target.value)} placeholder="Custom 自定义" className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-purple-500/50" />
             <button onClick={handleCustomBet} className="px-4 py-2 rounded-xl bg-purple-600/30 text-purple-300 text-sm font-bold hover:bg-purple-600/50">Set</button>
           </div>
         </div>
@@ -377,6 +378,17 @@ export default function RoomPage() {
               </div>
             ))}
           </div>
+          {/* Dealer PnL preview */}
+          {Object.keys(roundInputs).length > 0 && (() => {
+            const totalPlayerPnl = Object.values(roundInputs).reduce((s, r) => s + (r.pnl || 0), 0);
+            const dealerPnl = -totalPlayerPnl;
+            return (
+              <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex justify-between items-center">
+                <span className="text-sm text-red-300">庄家 Dealer P&L:</span>
+                <span className={`text-lg font-bold font-mono ${dealerPnl >= 0 ? "text-green-400" : "text-red-400"}`}>{dealerPnl >= 0 ? "+" : ""}{Math.round(dealerPnl * 100) / 100}</span>
+              </div>
+            );
+          })()}
           <button onClick={submitResults} className="w-full mt-4 py-3 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-lg active:scale-95 transition-all">✅ Submit Round</button>
         </div>
       )}
