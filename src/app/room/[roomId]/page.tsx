@@ -23,7 +23,6 @@ export default function RoomPage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-  const [copied, setCopied] = useState(false);
   const [dealerHand, setDealerHand] = useState("无牛");
 
   const me = room?.players.find((p) => p.id === myId);
