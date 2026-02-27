@@ -46,9 +46,14 @@ export interface Settlement {
   amount: number;
 }
 
-// In-memory cache backed by file
-let rooms: Map<string, Room>;
-let dirty = false;
+// Always read from file on every access (Next.js dev mode resets module state)
+function ensureDir() {
+  const dir = join(process.cwd(), "data");
+  if (!existsSync(dir)) {
+    const { mkdirSync } = require("fs");
+    mkdirSync(dir, { recursive: true });
+  }
+}
 
 function loadRooms(): Map<string, Room> {
   try {
@@ -64,57 +69,39 @@ function loadRooms(): Map<string, Room> {
   return new Map();
 }
 
-function persistRooms() {
-  if (!dirty) return;
+function persistRooms(rooms: Map<string, Room>) {
   try {
-    const dir = join(process.cwd(), "data");
-    if (!existsSync(dir)) {
-      const { mkdirSync } = require("fs");
-      mkdirSync(dir, { recursive: true });
-    }
+    ensureDir();
     const obj: Record<string, Room> = {};
     rooms.forEach((v, k) => { obj[k] = v; });
     writeFileSync(STORE_PATH, JSON.stringify(obj));
-    dirty = false;
   } catch (e) {
     console.error("[store] persist error:", e);
   }
 }
 
-// Auto-persist every 2 seconds if dirty
-function initPersist() {
-  setInterval(persistRooms, 2000);
-}
-
-// Lazy init
-function getRooms(): Map<string, Room> {
-  if (!rooms) {
-    rooms = loadRooms();
-    initPersist();
-  }
-  return rooms;
-}
-
 export function getRoom(id: string): Room | undefined {
-  return getRooms().get(id.toUpperCase());
+  return loadRooms().get(id.toUpperCase());
 }
 
 export function setRoom(room: Room) {
   room.updatedAt = new Date().toISOString();
-  getRooms().set(room.id, room);
-  dirty = true;
+  const rooms = loadRooms();
+  rooms.set(room.id, room);
+  persistRooms(rooms);
 }
 
 export function deleteRoom(id: string) {
-  getRooms().delete(id);
-  dirty = true;
+  const rooms = loadRooms();
+  rooms.delete(id);
+  persistRooms(rooms);
 }
 
 export function genRoomId(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "";
   for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
-  return getRooms().has(id) ? genRoomId() : id;
+  return loadRooms().has(id) ? genRoomId() : id;
 }
 
 export function genPlayerId(): string {
