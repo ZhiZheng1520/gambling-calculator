@@ -116,7 +116,17 @@ app.prepare().then(() => {
       const room = rooms.get(roomId.toUpperCase());
       if (!room) return cb({ success: false, error: "Room not found" });
       if (room.status === "settled") return cb({ success: false, error: "Room already settled" });
-      if (room.players.find((p) => p.name === playerName)) return cb({ success: false, error: "Name taken" });
+      const existingPlayer = room.players.find((p) => p.name === playerName);
+      if (existingPlayer) {
+        // Reconnect: update socket, return existing player
+        existingPlayer.socketId = socket.id;
+        existingPlayer.connected = true;
+        socket.join(room.id);
+        socket.data = { roomId: room.id, playerId: existingPlayer.id };
+        cb({ success: true, roomId: room.id, playerId: existingPlayer.id, room, reconnected: true });
+        io.to(room.id).emit("room-state", room);
+        return;
+      }
 
       const playerId = genPlayerId();
       const player: Player = {
@@ -180,6 +190,17 @@ app.prepare().then(() => {
       const round = room.rounds[room.rounds.length - 1];
       if (!round) return cb?.({ success: false, error: "No active round" });
       
+      // Auto-add dealer inverse if not already included
+      const dealer = room.players.find((p) => p.isDealer);
+      if (dealer && !results.find((r) => r.playerId === dealer.id)) {
+        const dealerPnl = -results.reduce((s, r) => s + r.pnl, 0);
+        results.push({
+          playerId: dealer.id, playerName: dealer.name,
+          bet: 0, outcome: "Dealer", multiplier: 1,
+          pnl: Math.round(dealerPnl * 100) / 100,
+        });
+      }
+
       round.results = results;
       
       // Update scores
