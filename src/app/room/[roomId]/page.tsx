@@ -328,26 +328,26 @@ export default function RoomPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
+      <div className="mb-4 space-y-2">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-2xl">{room.game === "niuniu" ? "🐂" : "🃏"}</span>
             <h1 className="text-xl font-bold text-white">{room.game === "niuniu" ? "牛牛" : "21点"}</h1>
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <button onClick={copyRoomCode} className="text-lg font-mono font-bold tracking-[0.15em] bg-purple-600/30 text-purple-300 px-3 py-1 rounded-lg hover:bg-purple-600/50 active:scale-95 transition-all">{copied ? "✅ Copied!" : `${room.id} 📋`}</button>
-            <button onClick={shareRoom} className="text-sm bg-green-600/30 text-green-300 px-2 py-1 rounded-lg hover:bg-green-600/50 active:scale-95">🔗</button>
             <span className="text-xs text-gray-500">{room.status === "playing" ? `Round ${room.currentRound}` : room.currentRound > 0 ? `${room.currentRound} rounds` : "Ready"}</span>
             <span className="text-xs text-gray-500">👥{playerCount}</span>
           </div>
+          <div className="text-right">
+            <div className="text-sm text-gray-400 truncate max-w-[120px]">
+              {me?.name} {isHost && "👑"} {isDealer && <span className="text-red-400 font-bold">庄</span>}
+            </div>
+            <div className={`text-xl font-bold font-mono ${(me?.score || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+              {(me?.score || 0) >= 0 ? "+" : ""}{me?.score || 0}
+            </div>
+          </div>
         </div>
-        <div className="text-right">
-          <div className="text-sm text-gray-400">
-            {me?.name} {isHost && "👑"} {isDealer && <span className="text-red-400 font-bold">庄</span>}
-          </div>
-          <div className={`text-xl font-bold font-mono ${(me?.score || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
-            {(me?.score || 0) >= 0 ? "+" : ""}{me?.score || 0}
-          </div>
+        <div className="flex items-center gap-2">
+          <button onClick={copyRoomCode} className="text-lg font-mono font-bold tracking-[0.2em] bg-purple-600/30 text-purple-300 px-4 py-1.5 rounded-lg hover:bg-purple-600/50 active:scale-95 transition-all">{copied ? "✅ Copied!" : `${room.id} 📋`}</button>
+          <button onClick={shareRoom} className="text-sm bg-green-600/30 text-green-300 px-3 py-1.5 rounded-lg hover:bg-green-600/50 active:scale-95">🔗 Share</button>
         </div>
       </div>
 
